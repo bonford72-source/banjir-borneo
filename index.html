@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Semak Risiko Banjir Borneo</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --navy:#0b3d91; --ink:#1d2433; --muted:#667085; --line:#e4e7ec; --bg:#f5f7fb;
+    --c0:#2c7bb6; --c1:#74add1; --c2:#e6c200; --c3:#f08a24; --c4:#d7191c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+  header{background:linear-gradient(135deg,#0b3d91,#1565c0);color:#fff;padding:12px 14px 10px}
+  header h1{margin:0;font-size:18px;letter-spacing:.2px}
+  header p{margin:2px 0 0;font-size:12px;opacity:.85}
+  .search{display:flex;gap:6px;padding:10px 12px;background:#fff;border-bottom:1px solid var(--line);position:relative}
+  .search input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:15px}
+  .btn{border:0;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600;background:var(--navy);color:#fff;cursor:pointer}
+  .btn.ghost{background:#eef2fb;color:var(--navy)}
+  #results{position:absolute;left:12px;right:12px;top:54px;background:#fff;border:1px solid var(--line);border-radius:10px;z-index:1000;box-shadow:0 8px 24px rgba(0,0,0,.12);display:none;max-height:260px;overflow:auto}
+  #results div{padding:10px 12px;border-bottom:1px solid var(--line);font-size:14px;cursor:pointer}
+  #results div small{color:var(--muted)}
+  .chips{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;background:#fff;border-bottom:1px solid var(--line);scrollbar-width:none}
+  .chip{white-space:nowrap;padding:6px 10px;border-radius:999px;background:#eef2fb;color:var(--navy);font-size:12.5px;font-weight:600;border:0;cursor:pointer}
+  #map{height:46vh;min-height:280px}
+  .hint{font-size:12px;color:var(--muted);padding:8px 14px}
+  #panel{padding:4px 12px 28px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0}
+  .card h2{font-size:14px;margin:0 0 8px;color:var(--navy)}
+  .big{display:flex;align-items:center;gap:12px}
+  .badge{min-width:64px;height:64px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:22px}
+  .level{font-size:18px;font-weight:800}
+  .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .kv{background:var(--bg);border-radius:10px;padding:8px 10px}
+  .kv b{display:block;font-size:15px}
+  .kv span{font-size:11.5px;color:var(--muted)}
+  .bar{height:8px;border-radius:99px;background:linear-gradient(90deg,var(--c0),var(--c1),var(--c2),var(--c3),var(--c4));position:relative;margin:10px 0 4px}
+  .bar i{position:absolute;top:-4px;width:4px;height:16px;background:#111;border-radius:2px}
+  ul.why{margin:6px 0 0;padding-left:18px;font-size:13px}
+  ul.why li{margin:3px 0}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;font-size:12px}
+  .legend span{display:flex;align-items:center;gap:4px}
+  .legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+  svg text{font-family:inherit}
+  .loading{display:flex;align-items:center;gap:10px;font-size:14px}
+  .spin{width:18px;height:18px;border:3px solid #cfd8ea;border-top-color:var(--navy);border-radius:50%;animation:s 1s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .err{color:#b42318;font-size:13px}
+  footer{font-size:11px;color:var(--muted);padding:6px 14px 30px;line-height:1.5}
+  footer a{color:var(--navy)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🌊 Semak Risiko Banjir Borneo</h1>
+  <p>Brunei • Sabah • Sarawak • Kalimantan — klik mana-mana lokasi pada peta</p>
+</header>
+
+<div class="search">
+  <input id="q" placeholder="Cari tempat (cth: Kuala Belait, Sibu)…" autocomplete="off">
+  <button class="btn" id="go">Cari</button>
+  <button class="btn ghost" id="me" title="Lokasi saya">📍</button>
+  <div id="results"></div>
+</div>
+
+<div class="chips" id="chips"></div>
+<div id="map"></div>
+<div class="hint">Tekan pada peta untuk menilai risiko banjir di titik tersebut.</div>
+
+<div id="panel">
+  <div class="card">
+    <h2>Bagaimana ia berfungsi</h2>
+    <div style="font-size:13px;line-height:1.5">
+      App ini menggabungkan <b>ketinggian & bentuk muka bumi</b> (Copernicus DEM),
+      <b>ramalan hujan 7 hari</b> dan <b>ramalan aliran sungai GloFAS</b> untuk memberi:
+      <br>① <b>Kerentanan kawasan</b> – adakah lokasi ini rendah/lembah/dataran banjir.
+      <br>② <b>Amaran 7 hari</b> – adakah hujan & sungai dijangka luar biasa minggu ini.
+    </div>
+    <div class="legend" style="margin-top:10px">
+      <span><i style="background:var(--c0)"></i>Sangat Rendah</span>
+      <span><i style="background:var(--c1)"></i>Rendah</span>
+      <span><i style="background:var(--c2)"></i>Sederhana</span>
+      <span><i style="background:var(--c3)"></i>Tinggi</span>
+      <span><i style="background:var(--c4)"></i>Sangat Tinggi</span>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Data: Open-Meteo (Copernicus DEM GLO-90, ramalan cuaca, GloFAS v4), peta © OpenStreetMap, Esri, OpenTopoMap.
+  Penilaian ini adalah anggaran saringan awal, bukan amaran rasmi. Sentiasa rujuk pihak berkuasa:
+  <a href="https://publicinfobanjir.water.gov.my" target="_blank">Public Infobanjir (MY)</a> •
+  <a href="https://inarisk.bnpb.go.id" target="_blank">InaRISK (ID)</a> •
+  Jabatan Perkhidmatan Meteorologi Brunei.
+</footer>
+
+<script>
+(() => {
+  const COLORS = ['#2c7bb6','#74add1','#e6c200','#f08a24','#d7191c'];
+  const LEVELS = ['Sangat Rendah','Rendah','Sederhana','Tinggi','Sangat Tinggi'];
+  const ALERTS = ['Normal','Waspada','Amaran','Bahaya'];
+  const ALERT_COLORS = ['#12b76a','#e6c200','#f08a24','#d7191c'];
+  const BORNEO = {s:-4.5, n:7.5, w:108.5, e:119.5};
+
+  const TOWNS = [
+    ['Bandar Seri Begawan',4.8903,114.9401],['Kuala Belait',4.5833,114.2333],['Seria',4.6064,114.3248],
+    ['Tutong',4.8028,114.6492],['Bangar',4.7086,115.0739],['Miri',4.3995,113.9914],['Limbang',4.7500,115.0000],
+    ['Kuching',1.5535,110.3593],['Sibu',2.2873,111.8305],['Bintulu',3.1667,113.0333],
+    ['Kota Kinabalu',5.9804,116.0735],['Sandakan',5.8402,118.1179],['Tawau',4.2448,117.8911],
+    ['Beaufort',5.3473,115.7455],['Pontianak',-0.0263,109.3425],['Banjarmasin',-3.3186,114.5944],
+    ['Palangka Raya',-2.2161,113.9135],['Samarinda',-0.5022,117.1536],['Balikpapan',-1.2379,116.8529]
+  ];
+
+  // ---------- Map ----------
+  const map = L.map('map',{zoomControl:true}).setView([4.7,114.6],8);
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'© Esri'});
+  const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'© OpenTopoMap'});
+  osm.addTo(map);
+  L.control.layers({'Peta jalan':osm,'Satelit':sat,'Topografi (kontur)':topo},null,{position:'topright'}).addTo(map);
+  L.rectangle([[BORNEO.s,BORNEO.w],[BORNEO.n,BORNEO.e]],{color:'#0b3d91',weight:1,fill:false,dashArray:'4 4'}).addTo(map);
+
+  let marker = null, ring = null;
+  map.on('click', e => analyse(e.latlng.lat, e.latlng.lng));
+
+  // ---------- Chips ----------
+  const chips = document.getElementById('chips');
+  TOWNS.forEach(([n,la,lo]) => {
+    const b = document.createElement('button'); b.className='chip'; b.textContent=n;
+    b.onclick = () => { map.setView([la,lo],12); analyse(la,lo,n); };
+    chips.appendChild(b);
+  });
+
+  // ---------- Search (Open-Meteo geocoding) ----------
+  const q = document.getElementById('q'), res = document.getElementById('results');
+  async function search(){
+    const t = q.value.trim(); if(!t) return;
+    res.style.display='block'; res.innerHTML='<div>Mencari…</div>';
+    try{
+      const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(t)}&count=20&language=en&format=json`);
+      const j = await r.json();
+      const hits = (j.results||[]).filter(p => p.latitude>=BORNEO.s && p.latitude<=BORNEO.n && p.longitude>=BORNEO.w && p.longitude<=BORNEO.e);
+      if(!hits.length){ res.innerHTML='<div>Tiada tempat dijumpai di Borneo. Cuba ejaan lain, atau tekan terus pada peta.</div>'; return; }
+      res.innerHTML='';
+      hits.slice(0,8).forEach(p => {
+        const d = document.createElement('div');
+        d.innerHTML = `${p.name} <small>${[p.admin2,p.admin1,p.country].filter(Boolean).join(', ')}</small>`;
+        d.onclick = () => { res.style.display='none'; map.setView([p.latitude,p.longitude],12); analyse(p.latitude,p.longitude,p.name); };
+        res.appendChild(d);
+      });
+    }catch(e){ res.innerHTML='<div class="err">Carian gagal. Semak sambungan internet.</div>'; }
+  }
+  document.getElementById('go').onclick = search;
+  q.addEventListener('keydown', e => { if(e.key==='Enter') search(); });
+  document.addEventListener('click', e => { if(!e.target.closest('.search')) res.style.display='none'; });
+
+  document.getElementById('me').onclick = () => {
+    if(!navigator.geolocation){ alertPanel('Peranti ini tidak menyokong lokasi.'); return; }
+    navigator.geolocation.getCurrentPosition(
+      p => { map.setView([p.coords.latitude,p.coords.longitude],13); analyse(p.coords.latitude,p.coords.longitude,'Lokasi saya'); },
+      () => alertPanel('Tidak dapat akses lokasi. Benarkan "Location" untuk pelayar, atau tekan terus pada peta.')
+    );
+  };
+
+  // ---------- Helpers ----------
+  const panel = document.getElementById('panel');
+  const intro = panel.innerHTML;
+  function alertPanel(msg){ panel.innerHTML = `<div class="card err">${msg}</div>` + intro; }
+  const fmtDate = d => d.toISOString().slice(0,10);
+  const daysAgo = n => { const d=new Date(); d.setDate(d.getDate()-n); return fmtDate(d); };
+  const pct = (arr,p) => { const a=arr.filter(v=>v!=null&&!isNaN(v)).sort((x,y)=>x-y); if(!a.length) return null; const i=(a.length-1)*p, lo=Math.floor(i), hi=Math.ceil(i); return a[lo]+(a[hi]-a[lo])*(i-lo); };
+  const mean = a => { const b=a.filter(v=>v!=null); return b.length? b.reduce((s,v)=>s+v,0)/b.length : null; };
+  const r1 = v => v==null? '–' : (Math.round(v*10)/10).toLocaleString();
+  const r0 = v => v==null? '–' : Math.round(v).toLocaleString();
+  async function getJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(r.status); return r.json(); }
+
+  function offsets(lat, km){
+    const dLat = km/111.32, dLon = km/(111.32*Math.cos(lat*Math.PI/180));
+    const out=[]; for(let k=0;k<8;k++){ const a=k*Math.PI/4; out.push([Math.cos(a)*dLat, Math.sin(a)*dLon]); }
+    return out;
+  }
+
+  // ---------- Main analysis ----------
+  async function analyse(lat, lon, name){
+    if(lat<BORNEO.s||lat>BORNEO.n||lon<BORNEO.w||lon>BORNEO.e){
+      alertPanel('Lokasi di luar Borneo. Sila pilih lokasi di Brunei, Sabah, Sarawak atau Kalimantan.'); return;
+    }
+    if(marker) map.removeLayer(marker);
+    if(ring) map.removeLayer(ring);
+    marker = L.marker([lat,lon]).addTo(map);
+    ring = L.circle([lat,lon],{radius:3000,color:'#0b3d91',weight:1,fillOpacity:.04}).addTo(map);
+    panel.innerHTML = `<div class="card loading"><div class="spin"></div>Menganalisis ${name||'lokasi'}…</div>`;
+    panel.scrollIntoView({behavior:'smooth'});
+
+    // Elevation: centre + 8 points at 1 km + 8 points at 3 km
+    const pts = [[lat,lon]];
+    offsets(lat,1).forEach(([a,b])=>pts.push([lat+a,lon+b]));
+    offsets(lat,3).forEach(([a,b])=>pts.push([lat+a,lon+b]));
+    const elevURL = `https://api.open-meteo.com/v1/elevation?latitude=${pts.map(p=>p[0].toFixed(5)).join(',')}&longitude=${pts.map(p=>p[1].toFixed(5)).join(',')}`;
+    const wxURL = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=precipitation_sum,precipitation_probability_max&past_days=3&forecast_days=7&timezone=auto`;
+    const histURL = `https://flood-api.open-meteo.com/v1/flood?latitude=${lat}&longitude=${lon}&daily=river_discharge&start_date=${daysAgo(3*365)}&end_date=${daysAgo(1)}`;
+    const fcURL = `https://flood-api.open-meteo.com/v1/flood?latitude=${lat}&longitude=${lon}&daily=river_discharge,river_discharge_max&forecast_days=7`;
+
+    const [elev, wx, hist, fc] = await Promise.allSettled([getJSON(elevURL),getJSON(wxURL),getJSON(histURL),getJSON(fcURL)]);
+    if(elev.status!=='fulfilled'){
+      const why = (elev.reason && elev.reason.message) || elev.reason;
+      alertPanel(`Gagal mendapatkan data ketinggian.<br><small>Butiran teknikal: ${why} • dibuka melalui: ${location.protocol}</small><br><br>`+
+        (location.protocol.startsWith('http') ? 'Semak sambungan internet dan cuba lagi.' :
+        'Fail ini dibuka sebagai fail tempatan, dan aplikasi pembuka fail menyekat data dari internet. Buka melalui pautan web (https) – lihat arahan dalam chat.'));
+      return; }
+
+    // ----- Terrain susceptibility -----
+    const E = elev.value.elevation;
+    const e0 = E[0], ring1 = E.slice(1,9), ring3 = E.slice(9,17), all = E.slice(1);
+    if(e0 <= 0 && ring1.every(v=>v<=0)){ alertPanel('Titik ini kelihatan berada di laut. Pilih lokasi di darat.'); return; }
+    const relMean = e0 - mean(all);
+    const relMin  = e0 - Math.min(...all);
+    const higherFrac = all.filter(v=>v>e0).length/all.length;
+    const range1 = Math.max(...ring1, e0) - Math.min(...ring1, e0);
+
+    let s = 0; const why = [];
+    if(e0<=3){ s+=40; why.push(`Sangat rendah: ${r0(e0)} m dari aras laut (terdedah air pasang & limpahan sungai)`); }
+    else if(e0<=8){ s+=32; why.push(`Rendah: ${r0(e0)} m dari aras laut`); }
+    else if(e0<=15){ s+=24; why.push(`Agak rendah: ${r0(e0)} m dari aras laut`); }
+    else if(e0<=30){ s+=14; }
+    else if(e0<=60){ s+=6; }
+    if(relMean<=-10){ s+=25; why.push(`Lembah/lekukan: ${r0(-relMean)} m lebih rendah dari purata sekeliling (radius 3 km)`); }
+    else if(relMean<=-4){ s+=18; why.push(`Lebih rendah ${r0(-relMean)} m dari kawasan sekeliling`); }
+    else if(relMean<=-1){ s+=10; why.push('Sedikit lebih rendah dari kawasan sekeliling'); }
+    else if(relMean<=2){ s+=5; }
+    if(higherFrac>=0.85){ s+=10; why.push('Hampir semua kawasan sekeliling lebih tinggi – air cenderung mengalir ke sini'); }
+    if(range1<3){ s+=15; why.push('Kawasan sangat rata (dataran banjir) – air lambat surut'); }
+    else if(range1<10){ s+=8; }
+
+    let meanQ=null, p90=null, p99=null, histSeries=null, histDates=null;
+    if(hist.status==='fulfilled' && hist.value.daily){
+      histSeries = hist.value.daily.river_discharge; histDates = hist.value.daily.time;
+      meanQ = mean(histSeries); p90 = pct(histSeries,.9); p99 = pct(histSeries,.99);
+      if(meanQ>=500){ s+=12; why.push(`Berhampiran sungai besar (purata ${r0(meanQ)} m³/s)`); }
+      else if(meanQ>=100){ s+=8; why.push(`Berhampiran sungai utama (purata ${r0(meanQ)} m³/s)`); }
+      else if(meanQ>=20){ s+=4; }
+    }
+    s = Math.min(100,s);
+    const lvl = Math.min(4, Math.floor(s/20));
+
+    // ----- 7-day alert -----
+    let d = 0; const whyD = [];
+    let rainDates=[], rain=[], rainProb=[], sum7=null, max1=null, todayIdx=3;
+    if(wx.status==='fulfilled' && wx.value.daily){
+      rainDates = wx.value.daily.time; rain = wx.value.daily.precipitation_sum.map(v=>v??0);
+      rainProb = wx.value.daily.precipitation_probability_max||[];
+      const fut = rain.slice(todayIdx); sum7 = fut.reduce((a,b)=>a+b,0); max1 = Math.max(...fut);
+      const past3 = rain.slice(0,todayIdx).reduce((a,b)=>a+b,0);
+      if(max1>=100){ d+=40; whyD.push(`Hujan sangat lebat dijangka: sehingga ${r0(max1)} mm sehari`); }
+      else if(max1>=60){ d+=30; whyD.push(`Hujan lebat dijangka: sehingga ${r0(max1)} mm sehari`); }
+      else if(max1>=40){ d+=20; whyD.push(`Hujan agak lebat: sehingga ${r0(max1)} mm sehari`); }
+      else if(max1>=20){ d+=10; }
+      if(sum7>=200){ d+=20; whyD.push(`Jumlah hujan 7 hari tinggi: ${r0(sum7)} mm`); }
+      else if(sum7>=120){ d+=10; whyD.push(`Jumlah hujan 7 hari: ${r0(sum7)} mm`); }
+      if(past3>=80){ d+=10; whyD.push(`Tanah sudah tepu – ${r0(past3)} mm hujan dalam 3 hari lepas`); }
+    }
+    let fcDates=[], fcQ=[], fcMax=null;
+    if(fc.status==='fulfilled' && fc.value.daily){
+      fcDates = fc.value.daily.time; fcQ = fc.value.daily.river_discharge||[];
+      const mx = (fc.value.daily.river_discharge_max||fcQ).filter(v=>v!=null);
+      fcMax = mx.length? Math.max(...mx) : null;
+      if(fcMax!=null && p90!=null){
+        if(p99!=null && fcMax>=p99){ d+=40; whyD.push(`Aliran sungai diramal luar biasa tinggi (${r0(fcMax)} m³/s, melebihi paras 1% tertinggi 3 tahun)`); }
+        else if(fcMax>=p90){ d+=25; whyD.push(`Aliran sungai diramal tinggi (${r0(fcMax)} m³/s, melebihi paras 10% tertinggi)`); }
+        else if(fcMax>=pct(histSeries,.75)){ d+=10; whyD.push('Aliran sungai di atas paras biasa'); }
+      }
+    }
+    d = Math.min(100,d);
+    const aIdx = d<25?0:d<50?1:d<75?2:3;
+    // susceptibility amplifies alert
+    const overall = Math.round(0.5*s + 0.5*d*(0.5 + s/200));
+    const oIdx = Math.min(4, Math.floor(overall/20));
+
+    render({lat,lon,name,e0,s,lvl,why,d,aIdx,whyD,overall,oIdx,meanQ,p90,sum7,max1,fcMax,
+            rainDates,rain,rainProb,histSeries,histDates,fcDates,fcQ, wxOK:wx.status==='fulfilled', fcOK:fc.status==='fulfilled'});
+    marker.bindPopup(`<b>${name||'Lokasi dipilih'}</b><br>Kerentanan: ${LEVELS[lvl]}<br>Amaran 7 hari: ${ALERTS[aIdx]}`).openPopup();
+  }
+
+  // ---------- Charts (inline SVG) ----------
+  function rainChart(dates, rain, probs){
+    if(!dates.length) return '';
+    const W=320,H=150,pad=24,bw=(W-pad*2)/dates.length;
+    const mx = Math.max(50,...rain);
+    let bars='';
+    dates.forEach((t,i)=>{
+      const h=(rain[i]/mx)*(H-50), x=pad+i*bw+3, y=H-24-h;
+      const c = rain[i]>=60?'#d7191c':rain[i]>=40?'#f08a24':rain[i]>=20?'#e6c200':'#74add1';
+      const past = i<3;
+      bars+=`<rect x="${x}" y="${y}" width="${bw-6}" height="${Math.max(h,1)}" rx="3" fill="${c}" opacity="${past?.45:1}"/>`;
+      bars+=`<text x="${x+(bw-6)/2}" y="${y-3}" font-size="9" text-anchor="middle" fill="#333">${Math.round(rain[i])}</text>`;
+      const dd=new Date(t+'T00:00'); const lab = i===3?'Hari ini':dd.toLocaleDateString('ms-MY',{weekday:'short'});
+      bars+=`<text x="${x+(bw-6)/2}" y="${H-10}" font-size="8.5" text-anchor="middle" fill="${i===3?'#0b3d91':'#667085'}" font-weight="${i===3?700:400}">${lab}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="${pad}" x2="${W-pad}" y1="${H-24}" y2="${H-24}" stroke="#e4e7ec"/>${bars}</svg>
+      <div class="sub">Hujan harian (mm). Bar pudar = 3 hari lepas.</div>`;
+  }
+  function riverChart(hd, hs, fd, fq, p90){
+    if(!hs || !fq.length) return '<div class="sub">Data aliran sungai tidak tersedia untuk lokasi ini.</div>';
+    const H1 = hs.slice(-60), D1 = hd.slice(-60);
+    const vals = H1.concat(fq).filter(v=>v!=null);
+    const W=320,H=150,pad=28,n=H1.length+fq.length;
+    const mx = Math.max(...vals, p90||0)*1.1, mn = 0;
+    const X=i=>pad+(i/(n-1))*(W-pad-8), Y=v=>H-22-((v-mn)/(mx-mn))*(H-40);
+    const path = (arr,off)=>arr.map((v,i)=>v==null?'':`${i===0?'M':'L'}${X(i+off).toFixed(1)},${Y(v).toFixed(1)}`).join('');
+    let s=`<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+    if(p90){ s+=`<line x1="${pad}" x2="${W-8}" y1="${Y(p90)}" y2="${Y(p90)}" stroke="#f08a24" stroke-dasharray="4 3"/><text x="${W-8}" y="${Y(p90)-3}" font-size="8.5" text-anchor="end" fill="#f08a24">paras tinggi (P90)</text>`; }
+    s+=`<path d="${path(H1,0)}" fill="none" stroke="#2c7bb6" stroke-width="2"/>`;
+    s+=`<path d="${path(fq,H1.length)}" fill="none" stroke="#d7191c" stroke-width="2.2" stroke-dasharray="5 3"/>`;
+    s+=`<line x1="${X(H1.length)}" x2="${X(H1.length)}" y1="12" y2="${H-22}" stroke="#98a2b3" stroke-dasharray="2 3"/>`;
+    s+=`<text x="${X(H1.length)}" y="10" font-size="8.5" text-anchor="middle" fill="#667085">ramalan →</text>`;
+    s+=`<text x="${pad-4}" y="${Y(mx/1.1)+3}" font-size="8.5" text-anchor="end" fill="#667085">${r0(mx/1.1)}</text>`;
+    s+=`<text x="${pad-4}" y="${H-20}" font-size="8.5" text-anchor="end" fill="#667085">0</text>`;
+    s+=`<text x="${pad}" y="${H-6}" font-size="8.5" fill="#667085">60 hari lepas</text></svg>`;
+    return s+`<div class="sub">Aliran sungai terdekat (m³/s) – biru: sebenar, merah: ramalan GloFAS.</div>`;
+  }
+
+  // ---------- Render ----------
+  function render(o){
+    const ac = ALERT_COLORS[o.aIdx];
+    const list = a => a.length ? `<ul class="why">${a.map(x=>`<li>${x}</li>`).join('')}</ul>` : '<div class="sub">Tiada faktor utama dikesan.</div>';
+    panel.innerHTML = `
+      <div class="card">
+        <h2>📍 ${o.name||'Lokasi dipilih'}</h2>
+        <div class="sub">${o.lat.toFixed(5)}, ${o.lon.toFixed(5)}</div>
+        <div class="big" style="margin-top:10px">
+          <div class="badge" style="background:${COLORS[o.oIdx]}">${o.overall}</div>
+          <div><div class="level" style="color:${COLORS[o.oIdx]}">Risiko ${LEVELS[o.oIdx]}</div>
+          <div class="sub">Skor keseluruhan minggu ini (0–100)</div></div>
+        </div>
+        <div class="bar"><i style="left:calc(${o.overall}% - 2px)"></i></div>
+      </div>
+
+      <div class="card">
+        <h2>① Kerentanan kawasan (jangka panjang)</h2>
+        <div class="big">
+          <div class="badge" style="background:${COLORS[o.lvl]};min-width:52px;height:52px;font-size:18px">${o.s}</div>
+          <div><div class="level" style="color:${COLORS[o.lvl]}">${LEVELS[o.lvl]}</div>
+          <div class="sub">Berdasarkan ketinggian, bentuk muka bumi & sungai</div></div>
+        </div>
+        ${list(o.why)}
+        <div class="grid" style="margin-top:10px">
+          <div class="kv"><b>${r0(o.e0)} m</b><span>Ketinggian (aras laut)</span></div>
+          <div class="kv"><b>${o.meanQ!=null? r0(o.meanQ)+' m³/s':'–'}</b><span>Purata aliran sungai terdekat</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>② Amaran 7 hari</h2>
+        <div class="big">
+          <div class="badge" style="background:${ac};min-width:52px;height:52px;font-size:18px">${o.d}</div>
+          <div><div class="level" style="color:${ac}">${ALERTS[o.aIdx]}</div>
+          <div class="sub">Berdasarkan ramalan hujan & aliran sungai</div></div>
+        </div>
+        ${list(o.whyD)}
+        <div class="grid" style="margin-top:10px">
+          <div class="kv"><b>${o.sum7!=null? r0(o.sum7)+' mm':'–'}</b><span>Jumlah hujan 7 hari</span></div>
+          <div class="kv"><b>${o.max1!=null? r0(o.max1)+' mm':'–'}</b><span>Hujan harian tertinggi</span></div>
+        </div>
+        ${o.wxOK? '<div style="margin-top:10px">'+rainChart(o.rainDates,o.rain,o.rainProb)+'</div>' : '<div class="err">Ramalan hujan tidak dapat dimuat.</div>'}
+      </div>
+
+      <div class="card">
+        <h2>🌊 Paras aliran sungai</h2>
+        ${riverChart(o.histDates,o.histSeries,o.fcDates,o.fcQ,o.p90)}
+      </div>
+      ${intro}`;
+  }
+
+  // Default: Kuala Belait
+  setTimeout(()=>{ map.setView([4.5833,114.2333],11); analyse(4.5833,114.2333,'Kuala Belait'); }, 400);
+})();
+</script>
+</body>
+</html>
